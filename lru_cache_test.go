@@ -67,7 +67,7 @@ func TestRemove(t *testing.T) {
 		t.Fatalf("TestRemove failed.  Expected %d, got %v", 1234, val)
 	}
 
-	lru.Remove(context.Background(), "myKey")
+	lru.Remove("myKey")
 	if _, ok, _ := lru.Get("myKey"); ok {
 		t.Fatal("TestRemove returned a removed entry")
 	}
@@ -80,7 +80,7 @@ func TestLen(t *testing.T) {
 		t.Fatalf("TestLen failed.  Expected %d, got %v", 1234, val)
 	}
 
-	lru.Remove(context.Background(), "myKey")
+	lru.Remove("myKey")
 	if val, _ := lru.Len(); val != 0 {
 		t.Fatalf("TestLen failed.  Expected %d, got %v", 1234, val)
 	}

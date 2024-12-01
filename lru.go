@@ -151,7 +151,7 @@ func (c *Cache) Put(key Key, val any) (err error) {
 // from the cache, ignoring if it does not exist.
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *Cache) Remove(ctx context.Context, key Key) (err error) {
+func (c *Cache) Remove(key Key) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
