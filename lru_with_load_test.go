@@ -2,8 +2,20 @@ package lru
 
 import (
 	"context"
+	"errors"
 	"testing"
 )
+
+func TestNewLoadingCache(t *testing.T) {
+	_, err := NewLoadingCache(context.Background(), nil, 0, 0)
+
+	if err == nil {
+		t.Fatal("TestNewLoadingCache fail.  Expected non-nil error")
+	}
+	if !errors.Is(err, ErrInvalidLoader) {
+		t.Fatalf("TestNewLoadingCache fail.  Expected error: %v, got error: %v", ErrInvalidMaxEntries, err)
+	}
+}
 
 func TestLoadingCache_Get(t *testing.T) {
 	loader := func(key Key) (any, error) {
@@ -11,7 +23,7 @@ func TestLoadingCache_Get(t *testing.T) {
 	}
 
 	for _, tt := range getTests {
-		lru := NewLoadingCache(context.Background(), loader, 0, 0)
+		lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 		defer lru.Close()
 
 		lru.Put(tt.keyToAdd, 1234)
@@ -29,7 +41,7 @@ func TestLoadingCache_Remove(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru := NewLoadingCache(context.Background(), loader, 0, 0)
+	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
@@ -50,7 +62,7 @@ func TestLoadingCache_Len(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru := NewLoadingCache(context.Background(), loader, 0, 0)
+	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
@@ -69,7 +81,7 @@ func TestLoadingCache_Get_1(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru := NewLoadingCache(context.Background(), loader, 0, 0)
+	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 	defer lru.Close()
 
 	v, ok, err := lru.Get("Failure")
@@ -100,7 +112,7 @@ func TestLoadingCache_Get_2(t *testing.T) {
 		return *v, nil
 	}
 
-	lru := NewLoadingCache(context.Background(), loader, 0, 0)
+	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 	defer lru.Close()
 
 	f := func() {

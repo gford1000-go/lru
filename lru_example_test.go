@@ -8,10 +8,10 @@ import (
 
 func ExampleMain() {
 
-	ctx := context.Background()
+	c, _ := NewBasicCache(context.Background(), 10, 1*time.Millisecond)
 
 	// BasicCache implements the Cache interface
-	var cache Cache = NewBasicCache(ctx, 10, 1*time.Millisecond)
+	var cache Cache = c
 
 	key := "Key1"
 	val := 1234

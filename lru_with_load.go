@@ -2,6 +2,7 @@ package lru
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -60,6 +61,8 @@ func (l *LoadingCache) Remove(key Key) (err error) {
 	return l.cache.Remove(key)
 }
 
+var ErrInvalidLoader = errors.New("loader must not be nil")
+
 // NewLoadingCache creates a new LRU cache instance with the specified capacity
 // and timeout for request processing, plus it will invoke the specified Loader function
 // to populate the cache, if the requested key is not already in the cache.
@@ -68,7 +71,12 @@ func (l *LoadingCache) Remove(key Key) (err error) {
 // indefinitely.
 // If timeout <= 0 then an infinite timeout is used (not recommended)
 // Close() should be called when the cache is no longer needed, to release resources
-func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout time.Duration) *LoadingCache {
+func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout time.Duration) (*LoadingCache, error) {
+
+	if loader == nil {
+		return nil, ErrInvalidLoader
+	}
+
 	// Ensures recovery from panic, converted to error
 	wrapped := func(key Key) (v any, err error) {
 		defer func() {
@@ -80,8 +88,13 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 		return loader(key)
 	}
 
-	return &LoadingCache{
-		cache:  NewBasicCache(ctx, maxEntries, timeout),
-		loader: wrapped,
+	c, err := NewBasicCache(ctx, maxEntries, timeout)
+	if err != nil {
+		return nil, err
 	}
+
+	return &LoadingCache{
+		cache:  c,
+		loader: wrapped,
+	}, nil
 }

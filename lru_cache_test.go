@@ -50,7 +50,7 @@ var getTests = []struct {
 
 func TestBasicCache_Get(t *testing.T) {
 	for _, tt := range getTests {
-		lru := NewBasicCache(context.Background(), 0, 0)
+		lru, _ := NewBasicCache(context.Background(), 0, 0)
 		defer lru.Close()
 
 		lru.Put(tt.keyToAdd, 1234)
@@ -64,7 +64,7 @@ func TestBasicCache_Get(t *testing.T) {
 }
 
 func TestBasicCache_Remove(t *testing.T) {
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
@@ -81,7 +81,7 @@ func TestBasicCache_Remove(t *testing.T) {
 }
 
 func TestBasicCache_Len(t *testing.T) {
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
@@ -96,7 +96,7 @@ func TestBasicCache_Len(t *testing.T) {
 }
 
 func TestBasicCache_Put_1(t *testing.T) {
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 	defer lru.Close()
 
 	for i := 0; i < 10; i++ {
@@ -123,7 +123,7 @@ func TestBasicCache_Put_1(t *testing.T) {
 
 func TestBasicCache_Put_2(t *testing.T) {
 
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 	defer lru.Close()
 
 	var n int = 10000
@@ -173,7 +173,7 @@ func TestBasicCache_Put_3(t *testing.T) {
 
 	maxSize := 1000
 
-	lru := NewBasicCache(context.Background(), maxSize, 0)
+	lru, _ := NewBasicCache(context.Background(), maxSize, 0)
 	defer lru.Close()
 
 	var n int = maxSize * 2 // Should start evicting to maintain maxSize
@@ -206,7 +206,7 @@ func TestBasicCache_Put_3(t *testing.T) {
 }
 
 func TestBasicCache_Close(t *testing.T) {
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 
 	// Calling Close() more than once is harmless
 	lru.Close()
@@ -214,7 +214,7 @@ func TestBasicCache_Close(t *testing.T) {
 }
 
 func TestBasicCache_Close_1(t *testing.T) {
-	lru := NewBasicCache(context.Background(), 0, 0)
+	lru, _ := NewBasicCache(context.Background(), 0, 0)
 
 	// Calling lru after Close() generates error
 	lru.Close()
@@ -228,5 +228,16 @@ func TestBasicCache_Close_1(t *testing.T) {
 	}
 	if len != 0 {
 		t.Fatalf("TestBasicCache_Close_1 fail.  Expected Len = 0, but got %v", len)
+	}
+}
+
+func TestNewBasicCache(t *testing.T) {
+	_, err := NewBasicCache(context.Background(), -1, 0)
+
+	if err == nil {
+		t.Fatal("TestNewBasicCache fail.  Expected non-nil error")
+	}
+	if !errors.Is(err, ErrInvalidMaxEntries) {
+		t.Fatalf("TestNewBasicCache fail.  Expected error: %v, got error: %v", ErrInvalidMaxEntries, err)
 	}
 }

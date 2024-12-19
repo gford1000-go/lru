@@ -202,6 +202,8 @@ func (c *BasicCache) Remove(key Key) (err error) {
 	}
 }
 
+var ErrInvalidMaxEntries = errors.New("maxEntries must be zero or positive integer")
+
 // NewBasicCache creates a new LRU cache instance with the specified capacity
 // and timeout for request processing.
 // If capacity > 0 then a new addition will trigger eviction of the
@@ -209,7 +211,11 @@ func (c *BasicCache) Remove(key Key) (err error) {
 // indefinitely.
 // If timeout <= 0 then an infinite timeout is used (not recommended)
 // Close() should be called when the cache is no longer needed, to release resources
-func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) *BasicCache {
+func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) (*BasicCache, error) {
+
+	if maxEntries < 0 {
+		return nil, ErrInvalidMaxEntries
+	}
 
 	if timeout <= 0 {
 		timeout = time.Duration(24 * time.Hour) // Effectively infinite
@@ -270,5 +276,5 @@ func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) *
 		}
 	}()
 
-	return c
+	return c, nil
 }
