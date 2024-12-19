@@ -37,7 +37,9 @@ type getLenRequest struct {
 	c chan *getLenResponse
 }
 
-type Cache struct {
+// BasicCache provides a concurrency-safe implementation
+// of a bounded least-recently-used cache
+type BasicCache struct {
 	d   time.Duration
 	put chan *putRequest
 	get chan *getRequest
@@ -45,7 +47,8 @@ type Cache struct {
 	len chan *getLenRequest
 }
 
-func (c *Cache) Close() {
+// Close releases all resources associated with the cache
+func (c *BasicCache) Close() {
 	defer func() {
 		recover()
 	}()
@@ -57,15 +60,22 @@ func (c *Cache) Close() {
 
 var ErrTimeout = errors.New("timeout exceeded")
 var ErrUnknown = errors.New("unknown error")
+var ErrAttemptToUseInvalidCache = errors.New("cache has been Closed() and is unusable")
+var sendToClosedChanPanicMsg = "send on closed channel"
 
 // Get will retrieve the item with the specified key
 // into the cache, updating its lru status.
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *Cache) Get(key Key) (v any, ok bool, err error) {
+func (c *BasicCache) Get(key Key) (v any, ok bool, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
+				err = ErrAttemptToUseInvalidCache
+			} else {
+				// Something unexpected - report this
+				err = fmt.Errorf("%v", r)
+			}
 		}
 	}()
 
@@ -91,10 +101,15 @@ func (c *Cache) Get(key Key) (v any, ok bool, err error) {
 // Len returns the number of items in the cache
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *Cache) Len() (l int, err error) {
+func (c *BasicCache) Len() (l int, err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
+				err = ErrAttemptToUseInvalidCache
+			} else {
+				// Something unexpected - report this
+				err = fmt.Errorf("%v", r)
+			}
 		}
 	}()
 
@@ -120,10 +135,15 @@ func (c *Cache) Len() (l int, err error) {
 // into the cache, replacing what was previously there (if anything).
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *Cache) Put(key Key, val any) (err error) {
+func (c *BasicCache) Put(key Key, val any) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
+				err = ErrAttemptToUseInvalidCache
+			} else {
+				// Something unexpected - report this
+				err = fmt.Errorf("%v", r)
+			}
 		}
 	}()
 
@@ -151,10 +171,15 @@ func (c *Cache) Put(key Key, val any) (err error) {
 // from the cache, ignoring if it does not exist.
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *Cache) Remove(key Key) (err error) {
+func (c *BasicCache) Remove(key Key) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
+			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
+				err = ErrAttemptToUseInvalidCache
+			} else {
+				// Something unexpected - report this
+				err = fmt.Errorf("%v", r)
+			}
 		}
 	}()
 
@@ -177,19 +202,20 @@ func (c *Cache) Remove(key Key) (err error) {
 	}
 }
 
-// New creates a new LRU cache instance with the specified capacity
+// NewBasicCache creates a new LRU cache instance with the specified capacity
 // and timeout for request processing.
 // If capacity > 0 then a new addition will trigger eviction of the
 // least recently used item.  If capacity = 0 then cache will grow
 // indefinitely.
 // If timeout <= 0 then an infinite timeout is used (not recommended)
-func New(ctx context.Context, maxEntries int, timeout time.Duration) *Cache {
+// Close() should be called when the cache is no longer needed, to release resources
+func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) *BasicCache {
 
 	if timeout <= 0 {
 		timeout = time.Duration(24 * time.Hour) // Effectively infinite
 	}
 
-	c := &Cache{
+	c := &BasicCache{
 		d:   timeout,
 		get: make(chan *getRequest, 100),
 		put: make(chan *putRequest, 100),

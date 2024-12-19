@@ -18,6 +18,9 @@ package lru
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -45,43 +48,185 @@ var getTests = []struct {
 		complexStruct{1, simpleStruct{2, "three"}}, true},
 }
 
-func TestGet(t *testing.T) {
+func TestBasicCache_Get(t *testing.T) {
 	for _, tt := range getTests {
-		lru := New(context.Background(), 0, 0)
+		lru := NewBasicCache(context.Background(), 0, 0)
+		defer lru.Close()
+
 		lru.Put(tt.keyToAdd, 1234)
 		val, ok, _ := lru.Get(tt.keyToGet)
 		if ok != tt.expectedOk {
-			t.Fatalf("%s: cache hit = %v; want %v", tt.name, ok, !ok)
+			t.Fatalf("TestBasicCache_Get failed.  %s: cache hit = %v; want %v", tt.name, ok, !ok)
 		} else if ok && val != 1234 {
-			t.Fatalf("%s expected get to return 1234 but got %v", tt.name, val)
+			t.Fatalf("TestBasicCache_Get failed.  %s expected get to return 1234 but got %v", tt.name, val)
 		}
 	}
 }
 
-func TestRemove(t *testing.T) {
-	lru := New(context.Background(), 0, 0)
+func TestBasicCache_Remove(t *testing.T) {
+	lru := NewBasicCache(context.Background(), 0, 0)
+	defer lru.Close()
+
 	lru.Put("myKey", 1234)
 	if val, ok, _ := lru.Get("myKey"); !ok {
-		t.Fatal("TestRemove returned no match")
+		t.Fatal("TestBasicCache_Remove returned no match")
 	} else if val != 1234 {
-		t.Fatalf("TestRemove failed.  Expected %d, got %v", 1234, val)
+		t.Fatalf("TestBasicCache_Remove failed.  Expected %d, got %v", 1234, val)
 	}
 
 	lru.Remove("myKey")
 	if _, ok, _ := lru.Get("myKey"); ok {
-		t.Fatal("TestRemove returned a removed entry")
+		t.Fatal("TestBasicCache_Remove returned a removed entry")
 	}
 }
 
-func TestLen(t *testing.T) {
-	lru := New(context.Background(), 0, 0)
+func TestBasicCache_Len(t *testing.T) {
+	lru := NewBasicCache(context.Background(), 0, 0)
+	defer lru.Close()
+
 	lru.Put("myKey", 1234)
 	if val, _ := lru.Len(); val != 1 {
-		t.Fatalf("TestLen failed.  Expected %d, got %v", 1234, val)
+		t.Fatalf("TestBasicCache_Len failed.  Expected %d, got %v", 1, val)
 	}
 
 	lru.Remove("myKey")
 	if val, _ := lru.Len(); val != 0 {
-		t.Fatalf("TestLen failed.  Expected %d, got %v", 1234, val)
+		t.Fatalf("TestBasicCache_Len failed.  Expected %d, got %v", 0, val)
+	}
+}
+
+func TestBasicCache_Put_1(t *testing.T) {
+	lru := NewBasicCache(context.Background(), 0, 0)
+	defer lru.Close()
+
+	for i := 0; i < 10; i++ {
+		if err := lru.Put("myKey", i); err != nil {
+			t.Errorf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
+		}
+	}
+
+	if val, _ := lru.Len(); val != 1 {
+		t.Fatalf("TestBasicCache_Put_1 failed.  Expected %d, got %v", 1, val)
+	}
+
+	val, ok, err := lru.Get("myKey")
+	if err != nil {
+		t.Errorf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
+	}
+	if !ok {
+		t.Error("TestBasicCache_Put_1 failed.  Expected ok = true, but got false")
+	}
+	if val.(int) != 9 {
+		t.Fatalf("TestBasicCache_Put_1 failed.  Expected v = 9, got %v", val)
+	}
+}
+
+func TestBasicCache_Put_2(t *testing.T) {
+
+	lru := NewBasicCache(context.Background(), 0, 0)
+	defer lru.Close()
+
+	var n int = 10000
+
+	var c chan error = make(chan error, n)
+	defer close(c)
+
+	make_key := func(i int) Key { return fmt.Sprintf("Key_%d", i) }
+
+	// Concurrent puts to the cache
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(v int) {
+			defer wg.Done()
+			c <- lru.Put(make_key(v), v)
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		e := <-c
+		if e != nil {
+			t.Errorf("TestBasicCache_Put_2 failed.  Expected success, but got error %v", e)
+		}
+	}
+
+	if val, _ := lru.Len(); val != n {
+		t.Fatalf("TestBasicCache_Put_2 failed.  Expected %d, got %v", n, val)
+	}
+
+	for i := 0; i < n; i++ {
+		val, ok, err := lru.Get(make_key(i))
+		if err != nil {
+			t.Fatalf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
+		}
+		if !ok {
+			t.Fatalf("TestBasicCache_Put_1 failed.  Expected ok = true, but got false")
+		}
+		if val.(int) != i {
+			t.Fatalf("TestBasicCache_Put_1 failed.  Expected v = %v, got %v", i, val)
+		}
+	}
+}
+
+func TestBasicCache_Put_3(t *testing.T) {
+
+	maxSize := 1000
+
+	lru := NewBasicCache(context.Background(), maxSize, 0)
+	defer lru.Close()
+
+	var n int = maxSize * 2 // Should start evicting to maintain maxSize
+
+	var c chan error = make(chan error, n)
+	defer close(c)
+
+	make_key := func(i int) Key { return fmt.Sprintf("Key_%d", i) }
+
+	var wg sync.WaitGroup
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(v int) {
+			defer wg.Done()
+			c <- lru.Put(make_key(v), v)
+		}(i)
+	}
+	wg.Wait()
+
+	for i := 0; i < n; i++ {
+		e := <-c
+		if e != nil {
+			t.Fatalf("TestBasicCache_Put_3 failed.  Expected success, but got error %v", e)
+		}
+	}
+
+	if val, _ := lru.Len(); val != maxSize {
+		t.Fatalf("TestBasicCache_Put_3 failed.  Expected %d, got %v", maxSize, val)
+	}
+}
+
+func TestBasicCache_Close(t *testing.T) {
+	lru := NewBasicCache(context.Background(), 0, 0)
+
+	// Calling Close() more than once is harmless
+	lru.Close()
+	lru.Close()
+}
+
+func TestBasicCache_Close_1(t *testing.T) {
+	lru := NewBasicCache(context.Background(), 0, 0)
+
+	// Calling lru after Close() generates error
+	lru.Close()
+
+	len, err := lru.Len()
+	if err == nil {
+		t.Fatal("TestBasicCache_Close_1 fail.  Expected non-nil error")
+	}
+	if !errors.Is(err, ErrAttemptToUseInvalidCache) {
+		t.Fatalf("TestBasicCache_Close_1 fail.  Expected error: %v, got error: %v", ErrAttemptToUseInvalidCache, err)
+	}
+	if len != 0 {
+		t.Fatalf("TestBasicCache_Close_1 fail.  Expected Len = 0, but got %v", len)
 	}
 }
