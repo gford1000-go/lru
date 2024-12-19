@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func ExampleMain() {
+func ExampleNewBasicCache() {
 
 	c, _ := NewBasicCache(context.Background(), 10, 1*time.Millisecond)
 
