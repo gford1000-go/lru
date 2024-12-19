@@ -6,8 +6,11 @@ import (
 	"time"
 )
 
+// Loader is a func that returns the value for the key, or returns an error
 type Loader func(key Key) (any, error)
 
+// LoadingCache is an implementation of Cache that will attempt to populate
+// itself for a missing Key, using a specified Loader function
 type LoadingCache struct {
 	cache  *BasicCache
 	loader Loader
