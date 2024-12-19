@@ -1,8 +1,7 @@
-
-# LRU | Least Recently Used Cache
-
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://en.wikipedia.org/wiki/MIT_License)
 [![Documentation](https://img.shields.io/badge/Documentation-GoDoc-green.svg)](https://godoc.org/github.com/gford1000-go/lru)
+
+# LRU | Least Recently Used Cache
 
 Different implementations of the `Cache` interface, all providing different approaches to Least Recently Used caches.
 
@@ -15,7 +14,6 @@ A new cache is created by calling `NewBasicCache` and all cache instances are
 independent of each other.
 
 If specified, the timeout value limits the wait time whilst attempting to interact with the cache, and generates an error when the timeout is exceeded.  Setting timeout to zero (infinite wait time on the cache action) avoids the error.
-
 
 ```go
 func main() {
