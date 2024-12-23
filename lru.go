@@ -18,15 +18,9 @@ type putRequest struct {
 	c chan struct{}
 }
 
-type getResponse struct {
-	ok bool
-	k  Key
-	v  any
-}
-
 type getRequest struct {
-	k Key
-	c chan *getResponse
+	keys []Key
+	c    chan []*CacheResult
 }
 
 type getLenResponse struct {
@@ -68,6 +62,19 @@ var sendToClosedChanPanicMsg = "send on closed channel"
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
 func (c *BasicCache) Get(key Key) (v any, ok bool, err error) {
+	res, err := c.GetBatch([]Key{key})
+	if err != nil {
+		return nil, false, err
+	}
+	if len(res) == 0 {
+		return nil, false, ErrUnknown
+	}
+	return res[0].Value, res[0].OK, res[0].Err
+}
+
+// GetBatch retrieves all the provided keys, returning a CacheResult for each
+// one, which provides the details of the retrieval of the key
+func (c *BasicCache) GetBatch(keys []Key) (cr []*CacheResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
@@ -79,22 +86,22 @@ func (c *BasicCache) Get(key Key) (v any, ok bool, err error) {
 		}
 	}()
 
-	ch := make(chan *getResponse)
+	ch := make(chan []*CacheResult)
 	defer close(ch)
 
 	c.get <- &getRequest{
-		k: key,
-		c: ch,
+		keys: keys,
+		c:    ch,
 	}
 
 	select {
 	case <-time.After(c.d):
-		return nil, false, ErrTimeout
-	case r, ok := <-ch:
+		return []*CacheResult{}, ErrTimeout
+	case cr, ok := <-ch:
 		if !ok {
-			return nil, false, ErrUnknown
+			return []*CacheResult{}, ErrUnknown
 		}
-		return r.v, r.ok, nil
+		return cr, nil
 	}
 }
 
@@ -246,12 +253,16 @@ func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) (
 				if !ok {
 					return
 				}
-				v, ok := cache.get(r.k)
-				r.c <- &getResponse{
-					ok: ok,
-					k:  r.k,
-					v:  v,
+				resp := []*CacheResult{}
+				for _, k := range r.keys {
+					v, ok := cache.get(k)
+					resp = append(resp, &CacheResult{
+						Key:   k,
+						Value: v,
+						OK:    ok,
+					})
 				}
+				r.c <- resp
 			case r, ok := <-c.len:
 				if !ok {
 					return

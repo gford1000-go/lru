@@ -7,8 +7,15 @@ import (
 	"time"
 )
 
-// Loader is a func that returns the value for the key, or returns an error
-type Loader func(key Key) (any, error)
+// LoaderResult provides the outcome of an attempt to load the specified key
+type LoaderResult struct {
+	Key   Key
+	Value any
+	Err   error
+}
+
+// Loader is a func that returns the value for the specified keys
+type Loader func(key []Key) ([]LoaderResult, error)
 
 // LoadingCache is an implementation of Cache that will attempt to populate
 // itself for a missing Key, using a specified Loader function
@@ -24,26 +31,76 @@ func (l *LoadingCache) Close() {
 
 // Get retrieves the value at the specified key
 func (l *LoadingCache) Get(key Key) (any, bool, error) {
-
-	v, ok, err := l.cache.Get(key)
+	res, err := l.GetBatch([]Key{key})
 	if err != nil {
 		return nil, false, err
 	}
-	if ok {
-		return v, ok, err
+	if len(res) == 0 {
+		return nil, false, ErrUnknown
 	}
+	return res[0].Value, res[0].OK, res[0].Err
+}
 
-	v, err = l.loader(key)
+// GetBatch retrieves the values at the specified keys
+func (l *LoadingCache) GetBatch(keys []Key) ([]*CacheResult, error) {
+
+	resp, err := l.cache.GetBatch(keys)
+
 	if err != nil {
-		return nil, false, err
+		return []*CacheResult{}, err
+	}
+	if len(resp) != len(keys) {
+		return []*CacheResult{}, ErrUnknown
 	}
 
-	err = l.Put(key, v)
-	if err != nil {
-		return nil, false, err
+	loaderKeys := []Key{}
+	for _, r := range resp {
+		if r.Err != nil || !r.OK {
+			loaderKeys = append(loaderKeys, r.Key)
+		}
 	}
 
-	return v, true, nil
+	if len(loaderKeys) > 0 {
+
+		loadResp, err := l.loader(loaderKeys)
+		if err != nil {
+			return []*CacheResult{}, err
+		}
+		if len(loadResp) != len(loaderKeys) {
+			return []*CacheResult{}, ErrUnknown
+		}
+
+		toCache := []LoaderResult{}
+		for _, lr := range loadResp {
+			for _, cr := range resp {
+				if lr.Key == cr.Key {
+					if lr.Err != nil {
+						cr.Err = lr.Err
+						cr.OK = false
+					} else {
+						cr.Value = lr.Value
+						if cr.Value != nil {
+							cr.OK = true
+							toCache = append(toCache, lr)
+						}
+					}
+					break
+				}
+			}
+		}
+
+		// No need to wait for cache to be updated
+		go func() {
+			defer recover() // No panics allowed
+
+			for _, o := range toCache {
+				l.Put(o.Key, o.Value)
+			}
+		}()
+
+	}
+
+	return resp, nil
 }
 
 // Len returns the current usage of the cache
@@ -78,14 +135,14 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 	}
 
 	// Ensures recovery from panic, converted to error
-	wrapped := func(key Key) (v any, err error) {
+	wrapped := func(keys []Key) (cr []LoaderResult, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("unexpected error: %v", r)
 			}
 		}()
 
-		return loader(key)
+		return loader(keys)
 	}
 
 	c, err := NewBasicCache(ctx, maxEntries, timeout)

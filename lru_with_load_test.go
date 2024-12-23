@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 func TestNewLoadingCache(t *testing.T) {
@@ -18,7 +19,7 @@ func TestNewLoadingCache(t *testing.T) {
 }
 
 func TestLoadingCache_Get(t *testing.T) {
-	loader := func(key Key) (any, error) {
+	loader := func(keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -37,7 +38,7 @@ func TestLoadingCache_Get(t *testing.T) {
 }
 
 func TestLoadingCache_Remove(t *testing.T) {
-	loader := func(key Key) (any, error) {
+	loader := func(key []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -58,7 +59,7 @@ func TestLoadingCache_Remove(t *testing.T) {
 }
 
 func TestLoadingCache_Len(t *testing.T) {
-	loader := func(key Key) (any, error) {
+	loader := func(keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -77,7 +78,7 @@ func TestLoadingCache_Len(t *testing.T) {
 }
 
 func TestLoadingCache_Get_1(t *testing.T) {
-	loader := func(key Key) (any, error) {
+	loader := func(keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -107,9 +108,14 @@ func TestLoadingCache_Get_2(t *testing.T) {
 	var v *int = new(int)
 	var meaning = 42
 
-	loader := func(key Key) (any, error) {
+	loader := func(keys []Key) ([]LoaderResult, error) {
 		(*v) += meaning
-		return *v, nil
+		return []LoaderResult{
+			{
+				Key:   "Meaning of Life",
+				Value: *v,
+			},
+		}, nil
 	}
 
 	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
@@ -129,6 +135,8 @@ func TestLoadingCache_Get_2(t *testing.T) {
 		if !ok {
 			t.Fatal("TestLoadingCache_Get_2 failed.  Expected ok = true, got ok = false")
 		}
+
+		time.Sleep(100 * time.Microsecond) // Allow LoadingCache to populate on separate goroutine
 
 		l, err := lru.Len()
 		if err != nil {

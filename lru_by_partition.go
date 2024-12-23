@@ -59,12 +59,79 @@ func (p *PartitionedCache) Close() {
 
 // Get retrieves the value at the specified key
 func (p *PartitionedCache) Get(key Key) (v any, ok bool, err error) {
-	c, err := p.getCacheForKey(key)
+	res, err := p.GetBatch([]Key{key})
 	if err != nil {
 		return nil, false, err
 	}
+	if len(res) == 0 {
+		return nil, false, ErrUnknown
+	}
+	return res[0].Value, res[0].OK, res[0].Err
+}
 
-	return c.Get(key)
+// GetBatch retrieves the values at the specified keys
+func (p *PartitionedCache) GetBatch(keys []Key) ([]*CacheResult, error) {
+
+	type resp struct {
+		result []*CacheResult
+		err    error
+	}
+
+	type process struct {
+		c    Cache
+		keys []Key
+		ch   chan *resp
+	}
+
+	processes := []*process{}
+	defer func() {
+		for _, p := range processes {
+			close(p.ch)
+		}
+	}()
+
+	for _, key := range keys {
+		c, err := p.getCacheForKey(key)
+		if err != nil {
+			return []*CacheResult{}, err
+		}
+		found := false
+		for _, p := range processes {
+			if p.c == c {
+				found = true
+				p.keys = append(p.keys, key)
+				break
+			}
+		}
+		if !found {
+			processes = append(processes, &process{
+				c:    c,
+				keys: []Key{key},
+				ch:   make(chan *resp, 1),
+			})
+		}
+	}
+
+	for _, p := range processes {
+		go func(pp *process) {
+			result, err := pp.c.GetBatch(pp.keys)
+			pp.ch <- &resp{
+				result: result,
+				err:    err,
+			}
+		}(p)
+	}
+
+	output := []*CacheResult{}
+	for _, p := range processes {
+		r := <-p.ch
+		if r.err != nil {
+			return []*CacheResult{}, r.err
+		}
+		output = append(output, r.result...)
+	}
+
+	return output, nil
 }
 
 // Len returns the current usage of the cache
