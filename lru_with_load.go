@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // LoaderResult provides the outcome of an attempt to load the specified key
@@ -148,13 +151,23 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 
 	// Ensures recovery from panic, converted to error
 	wrapped := func(ctx context.Context, keys []Key) (cr []LoaderResult, err error) {
+
+		curSpan := trace.SpanFromContext(ctx)
+
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("unexpected error: %v", r)
+				curSpan.AddEvent(OTELSpanLoadErrorEvent, trace.WithAttributes(attribute.String("Error", err.Error())), trace.WithTimestamp(time.Now().UTC()))
 			}
 		}()
 
-		return loader(ctx, keys)
+		curSpan.AddEvent(OTELSpanStartLoadEvent, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
+
+		cr, err = loader(ctx, keys)
+
+		curSpan.AddEvent(OTELSpanEndLoadEvent, trace.WithAttributes(attribute.Int("Retrieved", len(cr))), trace.WithTimestamp(time.Now().UTC()))
+
+		return
 	}
 
 	c, err := NewBasicCache(ctx, maxEntries, timeout)
@@ -167,3 +180,12 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 		loader: wrapped,
 	}, nil
 }
+
+const (
+	// OTELSpanStartLoadEvent is the name of the event created when data retrieval is requested from the loader, recording the number of keys
+	OTELSpanStartLoadEvent = "Loading Data into Cache"
+	// OTELSpanEndLoadEvent is the name of the event created when the loader completes, recording the number of retrievals
+	OTELSpanEndLoadEvent = "Loaded Data into Cache"
+	// OTELSpanLoadErrorEvent is the name of the event created if a panic occurs during loading
+	OTELSpanLoadErrorEvent = "Cache Loading Error"
+)
