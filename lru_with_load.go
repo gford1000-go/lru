@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -44,8 +45,14 @@ func (l *LoadingCache) Get(ctx context.Context, key Key) (any, bool, error) {
 	return res[0].Value, res[0].OK, res[0].Err
 }
 
+const (
+	oTELLoadingCacheGetBatchStarted = "LoadingCache.GetBatch started"
+	oTELLoadingCacheGetBatchEnded   = "LoadingCache.GetBatch ended"
+	oTELLoadingCacheGetBatchError   = "LoadingCache.GetBatch Retrieval Error"
+)
+
 // GetBatch retrieves the values at the specified keys
-func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult, error) {
+func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheResult, err error) {
 
 	select {
 	case <-ctx.Done():
@@ -53,17 +60,30 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult
 	default:
 	}
 
-	resp, err := l.cache.GetBatch(ctx, keys)
+	curSpan := trace.SpanFromContext(ctx)
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unexpected error: %v", r)
+			curSpan.AddEvent(oTELLoadingCacheGetBatchError, trace.WithTimestamp(time.Now().UTC()))
+			curSpan.SetStatus(codes.Error, err.Error())
+		} else {
+			curSpan.AddEvent(oTELLoadingCacheGetBatchEnded, trace.WithAttributes(attribute.Int("Retrieved", len(res))), trace.WithTimestamp(time.Now().UTC()))
+		}
+	}()
+
+	curSpan.AddEvent(oTELLoadingCacheGetBatchStarted, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
+
+	res, err = l.cache.GetBatch(ctx, keys)
 
 	if err != nil {
 		return []*CacheResult{}, err
 	}
-	if len(resp) != len(keys) {
+	if len(res) != len(keys) {
 		return []*CacheResult{}, ErrUnknown
 	}
 
 	loaderKeys := []Key{}
-	for _, r := range resp {
+	for _, r := range res {
 		if r.Err != nil || !r.OK {
 			loaderKeys = append(loaderKeys, r.Key)
 		}
@@ -81,7 +101,7 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult
 
 		toCache := []LoaderResult{}
 		for _, lr := range loadResp {
-			for _, cr := range resp {
+			for _, cr := range res {
 				if lr.Key == cr.Key {
 					if lr.Err != nil {
 						cr.Err = lr.Err
@@ -109,7 +129,7 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult
 
 	}
 
-	return resp, nil
+	return res, nil
 }
 
 // Len returns the current usage of the cache
@@ -153,19 +173,19 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 	wrapped := func(ctx context.Context, keys []Key) (cr []LoaderResult, err error) {
 
 		curSpan := trace.SpanFromContext(ctx)
-
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("unexpected error: %v", r)
-				curSpan.AddEvent(OTELSpanLoadErrorEvent, trace.WithAttributes(attribute.String("Error", err.Error())), trace.WithTimestamp(time.Now().UTC()))
+				curSpan.AddEvent(oTELLoaderError, trace.WithTimestamp(time.Now().UTC()))
+				curSpan.SetStatus(codes.Error, err.Error())
+			} else {
+				curSpan.AddEvent(oTELLoaderEnded, trace.WithAttributes(attribute.Int("Loaded", len(cr))), trace.WithTimestamp(time.Now().UTC()))
 			}
 		}()
 
-		curSpan.AddEvent(OTELSpanStartLoadEvent, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
+		curSpan.AddEvent(oTELLoaderStarted, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
 
 		cr, err = loader(ctx, keys)
-
-		curSpan.AddEvent(OTELSpanEndLoadEvent, trace.WithAttributes(attribute.Int("Retrieved", len(cr))), trace.WithTimestamp(time.Now().UTC()))
 
 		return
 	}
@@ -182,10 +202,7 @@ func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout
 }
 
 const (
-	// OTELSpanStartLoadEvent is the name of the event created when data retrieval is requested from the loader, recording the number of keys
-	OTELSpanStartLoadEvent = "Loading Data into Cache"
-	// OTELSpanEndLoadEvent is the name of the event created when the loader completes, recording the number of retrievals
-	OTELSpanEndLoadEvent = "Loaded Data into Cache"
-	// OTELSpanLoadErrorEvent is the name of the event created if a panic occurs during loading
-	OTELSpanLoadErrorEvent = "Cache Loading Error"
+	oTELLoaderStarted = "Loader started"
+	oTELLoaderEnded   = "Loader ended"
+	oTELLoaderError   = "Loader Error"
 )

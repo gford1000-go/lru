@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type removeRequest struct {
@@ -72,25 +76,38 @@ func (c *BasicCache) Get(ctx context.Context, key Key) (v any, ok bool, err erro
 	return res[0].Value, res[0].OK, res[0].Err
 }
 
+const (
+	oTELBasicCacheGetBatchStarted = "BasicCache.GetBatch started"
+	oTELBasicCacheGetBatchEnded   = "BasicCache.GetBatch ended"
+	oTELBasicCacheGetBatchError   = "BasicCache.GetBatch Retrieval Error"
+)
+
 // GetBatch retrieves all the provided keys, returning a CacheResult for each
 // one, which provides the details of the retrieval of the key
 func (c *BasicCache) GetBatch(ctx context.Context, keys []Key) (cr []*CacheResult, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
-				err = ErrAttemptToUseInvalidCache
-			} else {
-				// Something unexpected - report this
-				err = fmt.Errorf("%v", r)
-			}
-		}
-	}()
 
 	select {
 	case <-ctx.Done():
 		return nil, ErrInvalidContext
 	default:
 	}
+
+	curSpan := trace.SpanFromContext(ctx)
+	defer func() {
+		if r := recover(); r != nil {
+			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
+				err = ErrAttemptToUseInvalidCache
+			} else {
+				err = fmt.Errorf("unexpected error: %v", r)
+			}
+			curSpan.AddEvent(oTELBasicCacheGetBatchError, trace.WithTimestamp(time.Now().UTC()))
+			curSpan.SetStatus(codes.Error, err.Error())
+		} else {
+			curSpan.AddEvent(oTELBasicCacheGetBatchEnded, trace.WithAttributes(attribute.Int("Retrieved", len(cr))), trace.WithTimestamp(time.Now().UTC()))
+		}
+	}()
+
+	curSpan.AddEvent(oTELBasicCacheGetBatchStarted, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
 
 	ch := make(chan []*CacheResult)
 	defer close(ch)
@@ -101,11 +118,13 @@ func (c *BasicCache) GetBatch(ctx context.Context, keys []Key) (cr []*CacheResul
 	}
 
 	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
 	case <-time.After(c.d):
-		return []*CacheResult{}, ErrTimeout
+		return nil, ErrTimeout
 	case cr, ok := <-ch:
 		if !ok {
-			return []*CacheResult{}, ErrUnknown
+			return nil, ErrUnknown
 		}
 		return cr, nil
 	}

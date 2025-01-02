@@ -3,7 +3,13 @@ package lru
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"time"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // Partitions mutually divide the cached data
@@ -69,14 +75,33 @@ func (p *PartitionedCache) Get(ctx context.Context, key Key) (v any, ok bool, er
 	return res[0].Value, res[0].OK, res[0].Err
 }
 
+const (
+	oTELPartitionedCacheGetBatchStarted = "PartitionedCache.GetBatch started"
+	oTELPartitionedCacheGetBatchEnded   = "PartitionedCache.GetBatch ended"
+	oTELPartitionedCacheGetBatchError   = "PartitionedCache.GetBatch Retrieval Error"
+)
+
 // GetBatch retrieves the values at the specified keys
-func (p *PartitionedCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult, error) {
+func (p *PartitionedCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheResult, err error) {
 
 	select {
 	case <-ctx.Done():
 		return nil, ErrInvalidContext
 	default:
 	}
+
+	curSpan := trace.SpanFromContext(ctx)
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("unexpected error: %v", r)
+			curSpan.AddEvent(oTELPartitionedCacheGetBatchError, trace.WithTimestamp(time.Now().UTC()))
+			curSpan.SetStatus(codes.Error, err.Error())
+		} else {
+			curSpan.AddEvent(oTELPartitionedCacheGetBatchEnded, trace.WithAttributes(attribute.Int("Retrieved", len(res))), trace.WithTimestamp(time.Now().UTC()))
+		}
+	}()
+
+	curSpan.AddEvent(oTELPartitionedCacheGetBatchStarted, trace.WithAttributes(attribute.Int("Requested", len(keys))), trace.WithTimestamp(time.Now().UTC()))
 
 	type resp struct {
 		result []*CacheResult
@@ -99,7 +124,7 @@ func (p *PartitionedCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheRe
 	for _, key := range keys {
 		c, err := p.getCacheForKey(key)
 		if err != nil {
-			return []*CacheResult{}, err
+			return nil, err
 		}
 		found := false
 		for _, p := range processes {
@@ -128,16 +153,16 @@ func (p *PartitionedCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheRe
 		}(p)
 	}
 
-	output := []*CacheResult{}
+	res = []*CacheResult{}
 	for _, p := range processes {
 		r := <-p.ch
 		if r.err != nil {
-			return []*CacheResult{}, r.err
+			return nil, r.err
 		}
-		output = append(output, r.result...)
+		res = append(res, r.result...)
 	}
 
-	return output, nil
+	return res, nil
 }
 
 // Len returns the current usage of the cache
