@@ -54,7 +54,7 @@ func TestBasicCache_Get(t *testing.T) {
 		defer lru.Close()
 
 		lru.Put(tt.keyToAdd, 1234)
-		val, ok, _ := lru.Get(tt.keyToGet)
+		val, ok, _ := lru.Get(context.Background(), tt.keyToGet)
 		if ok != tt.expectedOk {
 			t.Fatalf("TestBasicCache_Get failed.  %s: cache hit = %v; want %v", tt.name, ok, !ok)
 		} else if ok && val != 1234 {
@@ -68,14 +68,14 @@ func TestBasicCache_Remove(t *testing.T) {
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
-	if val, ok, _ := lru.Get("myKey"); !ok {
+	if val, ok, _ := lru.Get(context.Background(), "myKey"); !ok {
 		t.Fatal("TestBasicCache_Remove returned no match")
 	} else if val != 1234 {
 		t.Fatalf("TestBasicCache_Remove failed.  Expected %d, got %v", 1234, val)
 	}
 
 	lru.Remove("myKey")
-	if _, ok, _ := lru.Get("myKey"); ok {
+	if _, ok, _ := lru.Get(context.Background(), "myKey"); ok {
 		t.Fatal("TestBasicCache_Remove returned a removed entry")
 	}
 }
@@ -109,7 +109,7 @@ func TestBasicCache_Put_1(t *testing.T) {
 		t.Fatalf("TestBasicCache_Put_1 failed.  Expected %d, got %v", 1, val)
 	}
 
-	val, ok, err := lru.Get("myKey")
+	val, ok, err := lru.Get(context.Background(), "myKey")
 	if err != nil {
 		t.Errorf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
 	}
@@ -156,7 +156,7 @@ func TestBasicCache_Put_2(t *testing.T) {
 	}
 
 	for i := 0; i < n; i++ {
-		val, ok, err := lru.Get(make_key(i))
+		val, ok, err := lru.Get(context.Background(), make_key(i))
 		if err != nil {
 			t.Fatalf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
 		}

@@ -19,7 +19,7 @@ func TestNewLoadingCache(t *testing.T) {
 }
 
 func TestLoadingCache_Get(t *testing.T) {
-	loader := func(keys []Key) ([]LoaderResult, error) {
+	loader := func(ctx context.Context, keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -28,7 +28,7 @@ func TestLoadingCache_Get(t *testing.T) {
 		defer lru.Close()
 
 		lru.Put(tt.keyToAdd, 1234)
-		val, ok, _ := lru.Get(tt.keyToGet)
+		val, ok, _ := lru.Get(context.Background(), tt.keyToGet)
 		if ok != tt.expectedOk {
 			t.Fatalf("TestLoadingCache_Get failed. %s: cache hit = %v; want %v", tt.name, ok, !ok)
 		} else if ok && val != 1234 {
@@ -38,7 +38,7 @@ func TestLoadingCache_Get(t *testing.T) {
 }
 
 func TestLoadingCache_Remove(t *testing.T) {
-	loader := func(key []Key) ([]LoaderResult, error) {
+	loader := func(ctx context.Context, key []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -46,20 +46,20 @@ func TestLoadingCache_Remove(t *testing.T) {
 	defer lru.Close()
 
 	lru.Put("myKey", 1234)
-	if val, ok, _ := lru.Get("myKey"); !ok {
+	if val, ok, _ := lru.Get(context.Background(), "myKey"); !ok {
 		t.Fatal("TestLoadingCache_Remove returned no match")
 	} else if val != 1234 {
 		t.Fatalf("TestLoadingCache_Remove failed.  Expected %d, got %v", 1234, val)
 	}
 
 	lru.Remove("myKey")
-	if _, ok, _ := lru.Get("myKey"); ok {
+	if _, ok, _ := lru.Get(context.Background(), "myKey"); ok {
 		t.Fatal("TestLoadingCache_Remove returned a removed entry")
 	}
 }
 
 func TestLoadingCache_Len(t *testing.T) {
-	loader := func(keys []Key) ([]LoaderResult, error) {
+	loader := func(ctx context.Context, keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
@@ -78,14 +78,14 @@ func TestLoadingCache_Len(t *testing.T) {
 }
 
 func TestLoadingCache_Get_1(t *testing.T) {
-	loader := func(keys []Key) ([]LoaderResult, error) {
+	loader := func(ctx context.Context, keys []Key) ([]LoaderResult, error) {
 		panic("Called!")
 	}
 
 	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
 	defer lru.Close()
 
-	v, ok, err := lru.Get("Failure")
+	v, ok, err := lru.Get(context.Background(), "Failure")
 	if err == nil {
 		t.Fatal("TestLoadingCache_Get_1 failed.  Expected an error, got nil")
 	}
@@ -108,7 +108,7 @@ func TestLoadingCache_Get_2(t *testing.T) {
 	var v *int = new(int)
 	var meaning = 42
 
-	loader := func(keys []Key) ([]LoaderResult, error) {
+	loader := func(ctx context.Context, keys []Key) ([]LoaderResult, error) {
 		(*v) += meaning
 		return []LoaderResult{
 			{
@@ -123,7 +123,7 @@ func TestLoadingCache_Get_2(t *testing.T) {
 
 	f := func() {
 
-		v, ok, err := lru.Get("Meaning of Life")
+		v, ok, err := lru.Get(context.Background(), "Meaning of Life")
 		if err != nil {
 			t.Fatalf("TestLoadingCache_Get_2 failed.  Expected no error, got '%v'", err)
 		}

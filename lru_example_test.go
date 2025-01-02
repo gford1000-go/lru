@@ -8,7 +8,9 @@ import (
 
 func ExampleNewBasicCache() {
 
-	c, _ := NewBasicCache(context.Background(), 10, 1*time.Millisecond)
+	ctx := context.Background()
+
+	c, _ := NewBasicCache(ctx, 10, 1*time.Millisecond)
 
 	// BasicCache implements the Cache interface
 	var cache Cache = c
@@ -18,7 +20,7 @@ func ExampleNewBasicCache() {
 
 	cache.Put(key, val) // Add
 
-	v, _, _ := cache.Get(key) // Retrieve
+	v, _, _ := cache.Get(ctx, key) // Retrieve
 
 	size1, _ := cache.Len() // Len
 
@@ -30,7 +32,7 @@ func ExampleNewBasicCache() {
 
 	size0, _ := cache.Len() // Now empty
 
-	_, ok, _ := cache.Get(key) // Not found
+	_, ok, _ := cache.Get(ctx, key) // Not found
 
 	fmt.Println(val == v, size1, sizeUnchanged, size0, ok)
 	// Output: true 1 1 0 false

@@ -15,7 +15,7 @@ type LoaderResult struct {
 }
 
 // Loader is a func that returns the value for the specified keys
-type Loader func(key []Key) ([]LoaderResult, error)
+type Loader func(ctx context.Context, key []Key) ([]LoaderResult, error)
 
 // LoadingCache is an implementation of Cache that will attempt to populate
 // itself for a missing Key, using a specified Loader function
@@ -30,8 +30,8 @@ func (l *LoadingCache) Close() {
 }
 
 // Get retrieves the value at the specified key
-func (l *LoadingCache) Get(key Key) (any, bool, error) {
-	res, err := l.GetBatch([]Key{key})
+func (l *LoadingCache) Get(ctx context.Context, key Key) (any, bool, error) {
+	res, err := l.GetBatch(ctx, []Key{key})
 	if err != nil {
 		return nil, false, err
 	}
@@ -42,9 +42,15 @@ func (l *LoadingCache) Get(key Key) (any, bool, error) {
 }
 
 // GetBatch retrieves the values at the specified keys
-func (l *LoadingCache) GetBatch(keys []Key) ([]*CacheResult, error) {
+func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult, error) {
 
-	resp, err := l.cache.GetBatch(keys)
+	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
+	default:
+	}
+
+	resp, err := l.cache.GetBatch(ctx, keys)
 
 	if err != nil {
 		return []*CacheResult{}, err
@@ -62,7 +68,7 @@ func (l *LoadingCache) GetBatch(keys []Key) ([]*CacheResult, error) {
 
 	if len(loaderKeys) > 0 {
 
-		loadResp, err := l.loader(loaderKeys)
+		loadResp, err := l.loader(ctx, loaderKeys)
 		if err != nil {
 			return []*CacheResult{}, err
 		}
@@ -130,19 +136,25 @@ var ErrInvalidLoader = errors.New("loader must not be nil")
 // Close() should be called when the cache is no longer needed, to release resources
 func NewLoadingCache(ctx context.Context, loader Loader, maxEntries int, timeout time.Duration) (*LoadingCache, error) {
 
+	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
+	default:
+	}
+
 	if loader == nil {
 		return nil, ErrInvalidLoader
 	}
 
 	// Ensures recovery from panic, converted to error
-	wrapped := func(keys []Key) (cr []LoaderResult, err error) {
+	wrapped := func(ctx context.Context, keys []Key) (cr []LoaderResult, err error) {
 		defer func() {
 			if r := recover(); r != nil {
 				err = fmt.Errorf("unexpected error: %v", r)
 			}
 		}()
 
-		return loader(keys)
+		return loader(ctx, keys)
 	}
 
 	c, err := NewBasicCache(ctx, maxEntries, timeout)

@@ -61,8 +61,8 @@ var sendToClosedChanPanicMsg = "send on closed channel"
 // into the cache, updating its lru status.
 // An error is raised if the Close() has been called, or
 // the timeoout for the operation is exceeded.
-func (c *BasicCache) Get(key Key) (v any, ok bool, err error) {
-	res, err := c.GetBatch([]Key{key})
+func (c *BasicCache) Get(ctx context.Context, key Key) (v any, ok bool, err error) {
+	res, err := c.GetBatch(ctx, []Key{key})
 	if err != nil {
 		return nil, false, err
 	}
@@ -74,7 +74,7 @@ func (c *BasicCache) Get(key Key) (v any, ok bool, err error) {
 
 // GetBatch retrieves all the provided keys, returning a CacheResult for each
 // one, which provides the details of the retrieval of the key
-func (c *BasicCache) GetBatch(keys []Key) (cr []*CacheResult, err error) {
+func (c *BasicCache) GetBatch(ctx context.Context, keys []Key) (cr []*CacheResult, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
@@ -85,6 +85,12 @@ func (c *BasicCache) GetBatch(keys []Key) (cr []*CacheResult, err error) {
 			}
 		}
 	}()
+
+	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
+	default:
+	}
 
 	ch := make(chan []*CacheResult)
 	defer close(ch)
@@ -211,6 +217,8 @@ func (c *BasicCache) Remove(key Key) (err error) {
 
 var ErrInvalidMaxEntries = errors.New("maxEntries must be zero or positive integer")
 
+var ErrInvalidContext = errors.New("context has already ended")
+
 // NewBasicCache creates a new LRU cache instance with the specified capacity
 // and timeout for request processing.
 // If capacity > 0 then a new addition will trigger eviction of the
@@ -219,6 +227,12 @@ var ErrInvalidMaxEntries = errors.New("maxEntries must be zero or positive integ
 // If timeout <= 0 then an infinite timeout is used (not recommended)
 // Close() should be called when the cache is no longer needed, to release resources
 func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) (*BasicCache, error) {
+
+	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
+	default:
+	}
 
 	if maxEntries < 0 {
 		return nil, ErrInvalidMaxEntries

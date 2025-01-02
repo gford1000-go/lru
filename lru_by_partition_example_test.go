@@ -37,7 +37,7 @@ func ExampleNewPartitionedCache() {
 		panic(err)
 	}
 
-	v, _, err := cache.Get("MeaningOfLife")
+	v, _, err := cache.Get(ctx, "MeaningOfLife")
 	if err != nil {
 		panic(err)
 	}

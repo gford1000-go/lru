@@ -58,8 +58,8 @@ func (p *PartitionedCache) Close() {
 }
 
 // Get retrieves the value at the specified key
-func (p *PartitionedCache) Get(key Key) (v any, ok bool, err error) {
-	res, err := p.GetBatch([]Key{key})
+func (p *PartitionedCache) Get(ctx context.Context, key Key) (v any, ok bool, err error) {
+	res, err := p.GetBatch(ctx, []Key{key})
 	if err != nil {
 		return nil, false, err
 	}
@@ -70,7 +70,13 @@ func (p *PartitionedCache) Get(key Key) (v any, ok bool, err error) {
 }
 
 // GetBatch retrieves the values at the specified keys
-func (p *PartitionedCache) GetBatch(keys []Key) ([]*CacheResult, error) {
+func (p *PartitionedCache) GetBatch(ctx context.Context, keys []Key) ([]*CacheResult, error) {
+
+	select {
+	case <-ctx.Done():
+		return nil, ErrInvalidContext
+	default:
+	}
 
 	type resp struct {
 		result []*CacheResult
@@ -114,7 +120,7 @@ func (p *PartitionedCache) GetBatch(keys []Key) ([]*CacheResult, error) {
 
 	for _, p := range processes {
 		go func(pp *process) {
-			result, err := pp.c.GetBatch(pp.keys)
+			result, err := pp.c.GetBatch(ctx, pp.keys)
 			pp.ch <- &resp{
 				result: result,
 				err:    err,
