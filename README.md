@@ -15,14 +15,19 @@ independent of each other.
 
 If specified, the timeout value limits the wait time whilst attempting to interact with the cache, and generates an error when the timeout is exceeded.  Setting timeout to zero (infinite wait time on the cache action) avoids the error.
 
+Note the context passed to NewBasicCache() controls the lifetime of the cache as a whole.  This can be different from the context
+passed to the Get() which can then control behaviour for each session that is interacting with the cache.
+
 ```go
 func main() {
-    cache, _ := NewBasicCache(context.Background(), 100, 1*time.Millisecond)
+    ctx := context.Background()
+
+    cache, _ := NewBasicCache(ctx, 100, 1*time.Millisecond)
     defer cache.Close()
 
     cache.Put("key", 123) 
 
-    if v, _, _ := cache.Get("key"); v != 123 {
+    if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")
     }
 }
@@ -40,18 +45,23 @@ and don't already exist in the cache.
 This simplifies data retrieval logic as it only needs to request entries from the cache, rather than needing additional
 code to specify do to load the data (and add to the cache) should the entry be missing from the cache.
 
+If OpenTelemetry is being used, and the context passed to Get() contains a Span, then if the loader is called, events will
+be added to that Span to record how many keys are requested and retrieved, together with timestamps.
+
 ```go
 func main() {
-    loader := func(key Key) (any, error) {
+    loader := func(ctx context.Context, key Key) (any, error) {
         // Interact with storage to retrieve
     }
 
-    cache, _ := NewLoadingCache(context.Background(), loader, 100, 1*time.Millisecond)
+    ctx := context.Background()
+
+    cache, _ := NewLoadingCache(ctx, loader, 100, 1*time.Millisecond)
     defer cache.Close()
 
     cache.Put("key", 123) 
 
-    if v, _, _ := cache.Get("key"); v != 123 {
+    if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")
     }
 }
@@ -95,7 +105,7 @@ func main() {
 
     cache.Put("key", 123) 
 
-    if v, _, _ := cache.Get("key"); v != 123 {
+    if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")
     }
 }
