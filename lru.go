@@ -38,6 +38,7 @@ type getLenRequest struct {
 // BasicCache provides a concurrency-safe implementation
 // of a bounded least-recently-used cache
 type BasicCache struct {
+	privateImp
 	d   time.Duration
 	put chan *putRequest
 	get chan *getRequest

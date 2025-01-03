@@ -24,6 +24,7 @@ type Loader func(ctx context.Context, key []Key) ([]LoaderResult, error)
 // LoadingCache is an implementation of Cache that will attempt to populate
 // itself for a missing Key, using a specified Loader function
 type LoadingCache struct {
+	privateImp
 	cache  *BasicCache
 	loader Loader
 }

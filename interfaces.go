@@ -28,4 +28,7 @@ type Cache interface {
 	Put(key Key, val any) (err error)
 	// Remove evicts the key and its associated value
 	Remove(key Key) (err error)
+
+	// Added to prevent implementations outside this package, minimising impact of change
+	private()
 }

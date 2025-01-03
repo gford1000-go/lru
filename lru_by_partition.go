@@ -26,6 +26,7 @@ var ErrInvalidPartition = errors.New("partitioner returned unknown partition for
 // This allows commonly used but slowly changing data to
 // avoid eviction and improve responsiveness.
 type PartitionedCache struct {
+	privateImp
 	partitioner Partitioner
 	partitions  map[Partition]Cache
 	lck         sync.RWMutex
