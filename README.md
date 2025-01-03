@@ -15,8 +15,8 @@ independent of each other.
 
 If specified, the timeout value limits the wait time whilst attempting to interact with the cache, and generates an error when the timeout is exceeded.  Setting timeout to zero (infinite wait time on the cache action) avoids the error.
 
-Note the context passed to NewBasicCache() controls the lifetime of the cache as a whole.  This can be different from the context
-passed to the Get() which can then control behaviour for each session that is interacting with the cache.
+Note the context passed to `NewBasicCache()` controls the lifetime of the cache as a whole.  This can be different from the context
+passed to the `Get()` which can then control behaviour for each session that is interacting with the cache.
 
 ```go
 func main() {
@@ -45,13 +45,13 @@ and don't already exist in the cache.
 This simplifies data retrieval logic as it only needs to request entries from the cache, rather than needing additional
 code to specify do to load the data (and add to the cache) should the entry be missing from the cache.
 
-If OpenTelemetry is being used, and the context passed to Get() contains a Span, then if the loader is called, events will
-be added to that Span to record how many keys are requested and retrieved, together with timestamps.
+If OpenTelemetry is being used, and the context passed to `Get()` contains a `Span`, then if the loader is called, events will
+be added to that `Span` to record how many keys are requested and retrieved, together with timestamps.
 
 ```go
 func main() {
-    loader := func(ctx context.Context, key Key) (any, error) {
-        // Interact with storage to retrieve
+    loader := func(ctx context.Context, keys []Key) ([]LoaderResult, error) {
+        // Interact with storage to retrieve data for specified keys
     }
 
     ctx := context.Background()
@@ -71,7 +71,7 @@ func main() {
 
 A partitioned cache is useful when some entries are considered to age more slowly than others; i.e. it is beneficial to retain some of the data in the cache when by normal LRU rules it should be evicted.
 
-The PartitionedCache is simply a facade to any number of `Cache` implementations, that are associated with a specific partition `Name`.
+The `PartitionedCache` is simply a facade to any number of `Cache` implementations, that are associated with a specific partition `Name`.
 
 The cache uses a `Partitioner` function that uses the `Key` to resolve which partition (cache) holds the entry, and then cache management of the entry is delegated to the `Cache` implementation of that partition.
 
