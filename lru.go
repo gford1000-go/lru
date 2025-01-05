@@ -167,37 +167,81 @@ func (c *BasicCache) Len() (l int, err error) {
 // Put will insert the item with the specified key
 // into the cache, replacing what was previously there (if anything).
 // An error is raised if the Close() has been called, or
-// the timeoout for the operation is exceeded.
-func (c *BasicCache) Put(key Key, val any) (err error) {
+// the timeout for the operation is exceeded.
+func (c *BasicCache) Put(ctx context.Context, key Key, val any) (err error) {
+	return c.PutBatch(ctx, []KeyVal{{Key: key, Value: val}})
+}
+
+const (
+	oTELBasicCachePutBatchStarted = "BasicCache.PutBatch started"
+	oTELBasicCachePutBatchEnded   = "BasicCache.PutBatch ended"
+	oTELBasicCachePutBatchError   = "BasicCache.PutBatch error"
+)
+
+var ErrInvalidValueToAddToCache = errors.New("value associated to a key cannot be nil")
+
+// PutBatch will insert the items into the cache, replacing what was previously there (if anything).
+// An error is raised if the Close() has been called, or the timeoout for the operation is exceeded.
+func (c *BasicCache) PutBatch(ctx context.Context, vals []KeyVal) (err error) {
+
+	select {
+	case <-ctx.Done():
+		return ErrInvalidContext
+	default:
+	}
+
+	if len(vals) == 0 {
+		return nil
+	}
+
+	var added = 0
+
+	curSpan := trace.SpanFromContext(ctx)
 	defer func() {
 		if r := recover(); r != nil {
 			if fmt.Sprintf("%v", r) == sendToClosedChanPanicMsg {
 				err = ErrAttemptToUseInvalidCache
 			} else {
-				// Something unexpected - report this
-				err = fmt.Errorf("%v", r)
+				err = fmt.Errorf("unexpected error: %v", r)
 			}
+			curSpan.AddEvent(oTELBasicCachePutBatchError, trace.WithTimestamp(time.Now().UTC()))
+			curSpan.SetStatus(codes.Error, err.Error())
+		} else {
+			curSpan.AddEvent(oTELBasicCachePutBatchEnded, trace.WithAttributes(attribute.Int("Added", added)), trace.WithTimestamp(time.Now().UTC()))
 		}
 	}()
+
+	curSpan.AddEvent(oTELBasicCachePutBatchStarted, trace.WithAttributes(attribute.Int("Requested", len(vals))), trace.WithTimestamp(time.Now().UTC()))
 
 	ch := make(chan struct{})
 	defer close(ch)
 
-	c.put <- &putRequest{
-		k: key,
-		v: val,
-		c: ch,
+	for _, v := range vals {
+
+		if v.Value == nil {
+			return ErrInvalidValueToAddToCache
+		}
+
+		c.put <- &putRequest{
+			k: v.Key,
+			v: v.Value,
+			c: ch,
+		}
+
+		select {
+		case <-ctx.Done():
+			return ErrInvalidContext
+		case <-time.After(c.d):
+			return ErrTimeout
+		case _, ok := <-ch:
+			if !ok {
+				return ErrUnknown
+			}
+			added++
+		}
 	}
 
-	select {
-	case <-time.After(c.d):
-		return ErrTimeout
-	case _, ok := <-ch:
-		if !ok {
-			return ErrUnknown
-		}
-		return nil
-	}
+	return nil
 }
 
 // Remove will remove the item with the specified key
@@ -291,9 +335,11 @@ func NewBasicCache(ctx context.Context, maxEntries int, timeout time.Duration) (
 				for _, k := range r.keys {
 					v, ok := cache.get(k)
 					resp = append(resp, &CacheResult{
-						Key:   k,
-						Value: v,
-						OK:    ok,
+						KeyVal: KeyVal{
+							Key:   k,
+							Value: v,
+						},
+						OK: ok,
 					})
 				}
 				r.c <- resp

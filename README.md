@@ -25,7 +25,7 @@ func main() {
     cache, _ := NewBasicCache(ctx, 100, 1*time.Millisecond)
     defer cache.Close()
 
-    cache.Put("key", 123) 
+    cache.Put(ctx, "key", 123) 
 
     if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")
@@ -59,7 +59,7 @@ func main() {
     cache, _ := NewLoadingCache(ctx, loader, 100, 1*time.Millisecond)
     defer cache.Close()
 
-    cache.Put("key", 123) 
+    cache.Put(ctx, "key", 123) 
 
     if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")
@@ -103,7 +103,7 @@ func main() {
     cache, _ := NewPartitionedCache(ctx, partitioner, info)
     defer cache.Close()
 
-    cache.Put("key", 123) 
+    cache.Put(ctx, "key", 123) 
 
     if v, _, _ := cache.Get(ctx, "key"); v != 123 {
         panic("should not happen!")

@@ -185,13 +185,13 @@ func (p *PartitionedCache) Len() (l int, err error) {
 }
 
 // Put inserts the value at the specified key, replacing any prior content
-func (p *PartitionedCache) Put(key Key, val any) (err error) {
+func (p *PartitionedCache) Put(ctx context.Context, key Key, val any) (err error) {
 	c, err := p.getCacheForKey(key)
 	if err != nil {
 		return err
 	}
 
-	return c.Put(key, val)
+	return c.Put(ctx, key, val)
 }
 
 // Remove evicts the key and its associated value

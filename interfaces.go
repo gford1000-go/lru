@@ -2,12 +2,17 @@ package lru
 
 import "context"
 
-// CacheResult describes the outcome of attempting to retrieve the value at the key
-type CacheResult struct {
+// KeyVal associates a Key to a Value
+type KeyVal struct {
 	// Key requested to be retrieved
 	Key Key
 	// Value retrieved for the key, if found
 	Value any
+}
+
+// CacheResult describes the outcome of attempting to retrieve the value at the key
+type CacheResult struct {
+	KeyVal
 	// OK set to true indicates successful retrieval for the key
 	OK bool
 	// Err holds any errors encountered during retrieval of this key
@@ -25,7 +30,9 @@ type Cache interface {
 	// Len returns the current usage of the cache
 	Len() (l int, err error)
 	// Put inserts the value at the specified key, replacing any prior content
-	Put(key Key, val any) (err error)
+	Put(ctx context.Context, key Key, val any) (err error)
+	// PutBatch inserts multiple key/values at once
+	PutBatch(ctx context.Context, vals []KeyVal) (err error)
 	// Remove evicts the key and its associated value
 	Remove(key Key) (err error)
 

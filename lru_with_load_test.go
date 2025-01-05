@@ -23,11 +23,13 @@ func TestLoadingCache_Get(t *testing.T) {
 		panic("Called!")
 	}
 
+	ctx := context.Background()
+
 	for _, tt := range getTests {
-		lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
+		lru, _ := NewLoadingCache(ctx, loader, 0, 0)
 		defer lru.Close()
 
-		lru.Put(tt.keyToAdd, 1234)
+		lru.Put(ctx, tt.keyToAdd, 1234)
 		val, ok, _ := lru.Get(context.Background(), tt.keyToGet)
 		if ok != tt.expectedOk {
 			t.Fatalf("TestLoadingCache_Get failed. %s: cache hit = %v; want %v", tt.name, ok, !ok)
@@ -42,10 +44,12 @@ func TestLoadingCache_Remove(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewLoadingCache(ctx, loader, 0, 0)
 	defer lru.Close()
 
-	lru.Put("myKey", 1234)
+	lru.Put(ctx, "myKey", 1234)
 	if val, ok, _ := lru.Get(context.Background(), "myKey"); !ok {
 		t.Fatal("TestLoadingCache_Remove returned no match")
 	} else if val != 1234 {
@@ -63,10 +67,12 @@ func TestLoadingCache_Len(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewLoadingCache(ctx, loader, 0, 0)
 	defer lru.Close()
 
-	lru.Put("myKey", 1234)
+	lru.Put(ctx, "myKey", 1234)
 	if val, _ := lru.Len(); val != 1 {
 		t.Fatalf("TestLoadingCache_Len failed.  Expected %d, got %v", 1234, val)
 	}
@@ -82,7 +88,9 @@ func TestLoadingCache_Get_1(t *testing.T) {
 		panic("Called!")
 	}
 
-	lru, _ := NewLoadingCache(context.Background(), loader, 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewLoadingCache(ctx, loader, 0, 0)
 	defer lru.Close()
 
 	v, ok, err := lru.Get(context.Background(), "Failure")

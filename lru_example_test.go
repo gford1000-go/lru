@@ -18,13 +18,13 @@ func ExampleNewBasicCache() {
 	key := "Key1"
 	val := 1234
 
-	cache.Put(key, val) // Add
+	cache.Put(ctx, key, val) // Add
 
 	v, _, _ := cache.Get(ctx, key) // Retrieve
 
 	size1, _ := cache.Len() // Len
 
-	cache.Put(key, val) // Overwrite
+	cache.Put(ctx, key, val) // Overwrite
 
 	sizeUnchanged, _ := cache.Len() // Has entry
 

@@ -49,11 +49,14 @@ var getTests = []struct {
 }
 
 func TestBasicCache_Get(t *testing.T) {
+
+	ctx := context.Background()
+
 	for _, tt := range getTests {
-		lru, _ := NewBasicCache(context.Background(), 0, 0)
+		lru, _ := NewBasicCache(ctx, 0, 0)
 		defer lru.Close()
 
-		lru.Put(tt.keyToAdd, 1234)
+		lru.Put(ctx, tt.keyToAdd, 1234)
 		val, ok, _ := lru.Get(context.Background(), tt.keyToGet)
 		if ok != tt.expectedOk {
 			t.Fatalf("TestBasicCache_Get failed.  %s: cache hit = %v; want %v", tt.name, ok, !ok)
@@ -64,10 +67,12 @@ func TestBasicCache_Get(t *testing.T) {
 }
 
 func TestBasicCache_Remove(t *testing.T) {
-	lru, _ := NewBasicCache(context.Background(), 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewBasicCache(ctx, 0, 0)
 	defer lru.Close()
 
-	lru.Put("myKey", 1234)
+	lru.Put(ctx, "myKey", 1234)
 	if val, ok, _ := lru.Get(context.Background(), "myKey"); !ok {
 		t.Fatal("TestBasicCache_Remove returned no match")
 	} else if val != 1234 {
@@ -81,10 +86,12 @@ func TestBasicCache_Remove(t *testing.T) {
 }
 
 func TestBasicCache_Len(t *testing.T) {
-	lru, _ := NewBasicCache(context.Background(), 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewBasicCache(ctx, 0, 0)
 	defer lru.Close()
 
-	lru.Put("myKey", 1234)
+	lru.Put(ctx, "myKey", 1234)
 	if val, _ := lru.Len(); val != 1 {
 		t.Fatalf("TestBasicCache_Len failed.  Expected %d, got %v", 1, val)
 	}
@@ -96,11 +103,13 @@ func TestBasicCache_Len(t *testing.T) {
 }
 
 func TestBasicCache_Put_1(t *testing.T) {
-	lru, _ := NewBasicCache(context.Background(), 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewBasicCache(ctx, 0, 0)
 	defer lru.Close()
 
 	for i := 0; i < 10; i++ {
-		if err := lru.Put("myKey", i); err != nil {
+		if err := lru.Put(ctx, "myKey", i); err != nil {
 			t.Errorf("TestBasicCache_Put_1 failed.  Expected success, but got error %v", err)
 		}
 	}
@@ -123,7 +132,9 @@ func TestBasicCache_Put_1(t *testing.T) {
 
 func TestBasicCache_Put_2(t *testing.T) {
 
-	lru, _ := NewBasicCache(context.Background(), 0, 0)
+	ctx := context.Background()
+
+	lru, _ := NewBasicCache(ctx, 0, 0)
 	defer lru.Close()
 
 	var n int = 10000
@@ -139,7 +150,7 @@ func TestBasicCache_Put_2(t *testing.T) {
 		wg.Add(1)
 		go func(v int) {
 			defer wg.Done()
-			c <- lru.Put(make_key(v), v)
+			c <- lru.Put(ctx, make_key(v), v)
 		}(i)
 	}
 	wg.Wait()
@@ -173,7 +184,9 @@ func TestBasicCache_Put_3(t *testing.T) {
 
 	maxSize := 1000
 
-	lru, _ := NewBasicCache(context.Background(), maxSize, 0)
+	ctx := context.Background()
+
+	lru, _ := NewBasicCache(ctx, maxSize, 0)
 	defer lru.Close()
 
 	var n int = maxSize * 2 // Should start evicting to maintain maxSize
@@ -188,7 +201,7 @@ func TestBasicCache_Put_3(t *testing.T) {
 		wg.Add(1)
 		go func(v int) {
 			defer wg.Done()
-			c <- lru.Put(make_key(v), v)
+			c <- lru.Put(ctx, make_key(v), v)
 		}(i)
 	}
 	wg.Wait()

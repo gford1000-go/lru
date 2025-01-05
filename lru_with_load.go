@@ -61,6 +61,10 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheRe
 	default:
 	}
 
+	if len(keys) == 0 {
+		return []*CacheResult{}, nil
+	}
+
 	curSpan := trace.SpanFromContext(ctx)
 	defer func() {
 		if r := recover(); r != nil {
@@ -77,10 +81,10 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheRe
 	res, err = l.cache.GetBatch(ctx, keys)
 
 	if err != nil {
-		return []*CacheResult{}, err
+		return nil, err
 	}
 	if len(res) != len(keys) {
-		return []*CacheResult{}, ErrUnknown
+		return nil, ErrUnknown
 	}
 
 	loaderKeys := []Key{}
@@ -94,13 +98,13 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheRe
 
 		loadResp, err := l.loader(ctx, loaderKeys)
 		if err != nil {
-			return []*CacheResult{}, err
+			return nil, err
 		}
 		if len(loadResp) != len(loaderKeys) {
-			return []*CacheResult{}, ErrUnknown
+			return nil, ErrUnknown
 		}
 
-		toCache := []LoaderResult{}
+		toCache := []KeyVal{}
 		for _, lr := range loadResp {
 			for _, cr := range res {
 				if lr.Key == cr.Key {
@@ -111,7 +115,7 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheRe
 						cr.Value = lr.Value
 						if cr.Value != nil {
 							cr.OK = true
-							toCache = append(toCache, lr)
+							toCache = append(toCache, KeyVal{Key: lr.Key, Value: lr.Value})
 						}
 					}
 					break
@@ -119,15 +123,7 @@ func (l *LoadingCache) GetBatch(ctx context.Context, keys []Key) (res []*CacheRe
 			}
 		}
 
-		// No need to wait for cache to be updated
-		go func() {
-			defer recover() // No panics allowed
-
-			for _, o := range toCache {
-				l.Put(o.Key, o.Value)
-			}
-		}()
-
+		l.PutBatch(ctx, toCache)
 	}
 
 	return res, nil
@@ -139,8 +135,13 @@ func (l *LoadingCache) Len() (int, error) {
 }
 
 // Put inserts the value at the specified key, replacing any prior content
-func (l *LoadingCache) Put(key Key, val any) (err error) {
-	return l.cache.Put(key, val)
+func (l *LoadingCache) Put(ctx context.Context, key Key, val any) (err error) {
+	return l.cache.Put(ctx, key, val)
+}
+
+// Put inserts the value at the specified key, replacing any prior content
+func (l *LoadingCache) PutBatch(ctx context.Context, vals []KeyVal) (err error) {
+	return l.cache.PutBatch(ctx, vals)
 }
 
 // Remove evicts the key and its associated value

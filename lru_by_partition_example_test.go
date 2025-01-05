@@ -32,7 +32,7 @@ func ExampleNewPartitionedCache() {
 	cache, _ := NewPartitionedCache(ctx, partitioner, info)
 	defer cache.Close()
 
-	err := cache.Put("MeaningOfLife", 42)
+	err := cache.Put(ctx, "MeaningOfLife", 42)
 	if err != nil {
 		panic(err)
 	}
